@@ -1,9 +1,5 @@
 package agent
 
-import (
-	"time"
-)
-
 type Role string
 
 const (
@@ -13,7 +9,6 @@ const (
 )
 
 type Message struct {
-	Role      Role      `json:"role"`
-	Content   string    `json:"content"`
-	CreatedAt time.Time `json:"created_at"`
+	Role    Role   `json:"role"`
+	Content string `json:"content"`
 }

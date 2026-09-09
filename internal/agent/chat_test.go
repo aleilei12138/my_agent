@@ -3,7 +3,6 @@ package agent
 import (
 	"context"
 	"testing"
-	"time"
 )
 
 type FakeLLM struct {
@@ -11,9 +10,8 @@ type FakeLLM struct {
 
 func (f *FakeLLM) Chat(ctx context.Context, messages []Message) (res *Message, err error) {
 	return &Message{
-		Role:      RoleAssistant,
-		Content:   "fake response",
-		CreatedAt: time.Now(),
+		Role:    RoleAssistant,
+		Content: "fake response",
 	}, nil
 }
 
@@ -23,9 +21,8 @@ func TestChat(t *testing.T) {
 	ctx := context.Background()
 	messages := []Message{
 		{
-			Role:      RoleUser,
-			Content:   "fake response",
-			CreatedAt: time.Now(),
+			Role:    RoleAssistant,
+			Content: "fake request",
 		},
 	}
 
