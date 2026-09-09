@@ -8,8 +8,8 @@ import (
 type FakeLLM struct {
 }
 
-func (f *FakeLLM) Chat(ctx context.Context, messages []Message) (res *Message, err error) {
-	return &Message{
+func (f *FakeLLM) Chat(ctx context.Context, messages []Message) (res Message, err error) {
+	return Message{
 		Role:    RoleAssistant,
 		Content: "fake response",
 	}, nil
@@ -21,14 +21,15 @@ func TestChat(t *testing.T) {
 	ctx := context.Background()
 	messages := []Message{
 		{
-			Role:    RoleAssistant,
+			Role:    RoleUser,
 			Content: "fake request",
 		},
 	}
+	agent := NewAgent(llm)
 
-	res, err := llm.Chat(ctx, messages)
+	res, err := agent.Chat(ctx, messages)
 	if err != nil {
-		t.Fatalf("llm.Chat failed: %v", err)
+		t.Fatalf("agent.Chat failed: %v", err)
 	}
 
 	if res.Content != "fake response" {
