@@ -16,6 +16,12 @@ var (
 		Usage: "main",
 		Brief: "start http server",
 		Func: func(ctx context.Context, parser *gcmd.Parser) (err error) {
+			agentInstance, err := newAgentFromConfig(ctx)
+			if err != nil {
+				return err
+			}
+			g.Log().Info(ctx, "agent initialized successfully")
+			_ = agentInstance // Use the agentInstance as needed
 			s := g.Server()
 			s.Group("/", func(group *ghttp.RouterGroup) {
 				group.Middleware(ghttp.MiddlewareHandlerResponse)
