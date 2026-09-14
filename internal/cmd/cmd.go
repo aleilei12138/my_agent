@@ -7,6 +7,7 @@ import (
 	"github.com/gogf/gf/v2/net/ghttp"
 	"github.com/gogf/gf/v2/os/gcmd"
 
+	"my-project/internal/controller/chat"
 	"my-project/internal/controller/hello"
 )
 
@@ -22,11 +23,13 @@ var (
 			}
 			g.Log().Info(ctx, "agent initialized successfully")
 			_ = agentInstance // Use the agentInstance as needed
+			chatController := chat.NewV1(agentInstance)
 			s := g.Server()
 			s.Group("/", func(group *ghttp.RouterGroup) {
 				group.Middleware(ghttp.MiddlewareHandlerResponse)
 				group.Bind(
 					hello.NewV1(),
+					chatController,
 				)
 			})
 			s.Run()
