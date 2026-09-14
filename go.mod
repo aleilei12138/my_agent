@@ -2,7 +2,10 @@ module my-project
 
 go 1.25.0
 
-require github.com/gogf/gf/v2 v2.10.3
+require (
+	github.com/gogf/gf/v2 v2.10.3
+	github.com/openai/openai-go/v3 v3.59.0
+)
 
 require (
 	github.com/BurntSushi/toml v1.5.0 // indirect
@@ -23,6 +26,10 @@ require (
 	github.com/olekukonko/ll v0.0.9 // indirect
 	github.com/olekukonko/tablewriter v1.1.0 // indirect
 	github.com/rivo/uniseg v0.2.0 // indirect
+	github.com/tidwall/gjson v1.19.0 // indirect
+	github.com/tidwall/match v1.1.1 // indirect
+	github.com/tidwall/pretty v1.2.1 // indirect
+	github.com/tidwall/sjson v1.2.5 // indirect
 	go.opentelemetry.io/auto/sdk v1.1.0 // indirect
 	go.opentelemetry.io/otel v1.38.0 // indirect
 	go.opentelemetry.io/otel/metric v1.38.0 // indirect
