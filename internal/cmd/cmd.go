@@ -22,7 +22,6 @@ var (
 				return err
 			}
 			g.Log().Info(ctx, "agent initialized successfully")
-			_ = agentInstance // Use the agentInstance as needed
 			chatController := chat.NewV1(agentInstance)
 			s := g.Server()
 			s.Group("/", func(group *ghttp.RouterGroup) {
