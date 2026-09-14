@@ -11,7 +11,7 @@ import (
 	"time"
 
 	openaisdk "github.com/openai/openai-go/v3"
-	option "github.com/openai/openai-go/v3/option"
+	"github.com/openai/openai-go/v3/option"
 )
 
 type Config struct {
@@ -22,23 +22,23 @@ type Config struct {
 }
 
 type Client struct {
-	client openaisdk.Client
+	client *openaisdk.Client
 	model  string
 }
 
 func NewClient(cfg Config) (*Client, error) {
 	if cfg.APIKey == "" {
-		return nil, fmt.Errorf("apiKey is empty")
+		return nil, fmt.Errorf("deepseek: apiKey is empty")
 	}
 	if cfg.Model == "" {
-		return nil, fmt.Errorf("model is empty")
+		return nil, fmt.Errorf("deepseek: model is empty")
 	}
 	baseURL := cfg.BaseURL
 	if baseURL == "" {
 		baseURL = "https://api.deepseek.com"
 	}
 
-	baseURL = strings.TrimSuffix(baseURL, "/")
+	baseURL = strings.TrimRight(baseURL, "/")
 
 	httpClient := cfg.HTTPClient
 	if httpClient == nil {
@@ -54,7 +54,7 @@ func NewClient(cfg Config) (*Client, error) {
 	)
 
 	return &Client{
-		client: sdkClient,
+		client: &sdkClient,
 		model:  cfg.Model,
 	}, nil
 }
@@ -66,7 +66,7 @@ func toSDKMessages(messages []agent.Message) ([]openaisdk.ChatCompletionMessageP
 		return nil, fmt.Errorf("deepseek: empty messages")
 	}
 
-	sdkMessages := make([]openaisdk.ChatCompletionMessageParamUnion, len(messages))
+	sdkMessages := make([]openaisdk.ChatCompletionMessageParamUnion, 0, len(messages))
 	for i, msg := range messages {
 		switch msg.Role {
 		case agent.RoleSystem:
