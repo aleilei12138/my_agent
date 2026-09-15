@@ -9,15 +9,17 @@ import (
 )
 
 type fakeTool struct {
-	name        string
-	description string
-	params      json.RawMessage
-	execFunc    func(ctx context.Context, args json.RawMessage) (ToolResult, error)
-	called      bool
-	lastArgs    json.RawMessage
+	name            string
+	description     string
+	params          json.RawMessage
+	execFunc        func(ctx context.Context, args json.RawMessage) (ToolResult, error)
+	called          bool
+	lastArgs        json.RawMessage
+	definitionCalls int
 }
 
 func (f *fakeTool) Definition() ToolDefinition {
+	f.definitionCalls++
 	return ToolDefinition{
 		Name:        f.name,
 		Description: f.description,
@@ -81,6 +83,14 @@ func TestToolRegistry_RegistrationValidation(t *testing.T) {
 		}
 	})
 
+	t.Run("typed nil tool", func(t *testing.T) {
+		var tool *fakeTool
+		_, err := NewToolRegistry(tool)
+		if err == nil {
+			t.Fatal("expected error for typed nil tool, got nil")
+		}
+	})
+
 	t.Run("empty tool name", func(t *testing.T) {
 		tool := &fakeTool{name: "  "}
 		_, err := NewToolRegistry(tool)
@@ -99,7 +109,45 @@ func TestToolRegistry_RegistrationValidation(t *testing.T) {
 	})
 }
 
-// 3. 测试未注册工具返回 ErrUnknownTool
+// 3. 测试注册表保存规范化后的固定定义，而不是在导出时重新读取工具定义
+func TestToolRegistry_DefinitionSnapshot(t *testing.T) {
+	tool := &fakeTool{
+		name:   " echo ",
+		params: json.RawMessage(`{"type":"object"}`),
+	}
+
+	registry, err := NewToolRegistry(tool)
+	if err != nil {
+		t.Fatalf("failed to init registry: %v", err)
+	}
+	if tool.definitionCalls != 1 {
+		t.Fatalf("expected Definition to be called once during registration, got %d", tool.definitionCalls)
+	}
+
+	// 修改工具内部名称，验证注册表仍然使用注册时保存的定义。
+	tool.name = "changed"
+	defs := registry.Definitions()
+	if tool.definitionCalls != 1 {
+		t.Fatalf("Definitions should not call Tool.Definition again, got %d calls", tool.definitionCalls)
+	}
+	if len(defs) != 1 || defs[0].Name != "echo" {
+		t.Fatalf("expected normalized snapshot name %q, got %+v", "echo", defs)
+	}
+
+	// 修改返回值后再次导出，验证调用者不能改变注册表内部快照。
+	defs[0].Parameters[0] = '['
+	defsAgain := registry.Definitions()
+	if !bytes.Equal(defsAgain[0].Parameters, json.RawMessage(`{"type":"object"}`)) {
+		t.Fatalf("definition snapshot was modified through returned value: %s", defsAgain[0].Parameters)
+	}
+
+	_, err = registry.Execute(context.Background(), ToolCall{ID: "call_echo", Name: "echo"})
+	if err != nil {
+		t.Fatalf("expected execution by normalized name to succeed, got: %v", err)
+	}
+}
+
+// 4. 测试未注册工具返回 ErrUnknownTool
 func TestToolRegistry_UnknownTool(t *testing.T) {
 	registry, err := NewToolRegistry(&fakeTool{name: "echo"})
 	if err != nil {
@@ -120,7 +168,7 @@ func TestToolRegistry_UnknownTool(t *testing.T) {
 	}
 }
 
-// 4. 测试 ToolCall 基础字段缺失校验
+// 5. 测试 ToolCall 基础字段缺失校验
 func TestToolRegistry_CallValidation(t *testing.T) {
 	registry, err := NewToolRegistry(&fakeTool{name: "echo"})
 	if err != nil {
@@ -142,7 +190,7 @@ func TestToolRegistry_CallValidation(t *testing.T) {
 	})
 }
 
-// 5. 测试底层 Tool 执行错误正确被 %w 包装
+// 6. 测试底层 Tool 执行错误正确被 %w 包装
 func TestToolRegistry_ExecutionErrorWrapping(t *testing.T) {
 	sentinelErr := errors.New("underlying network failure")
 	tool := &fakeTool{
@@ -171,7 +219,7 @@ func TestToolRegistry_ExecutionErrorWrapping(t *testing.T) {
 	}
 }
 
-// 6. 测试已取消的 Context 拒绝执行工具
+// 7. 测试已取消的 Context 拒绝执行工具
 func TestToolRegistry_CanceledContext(t *testing.T) {
 	tool := &fakeTool{name: "long_task"}
 	registry, err := NewToolRegistry(tool)
@@ -199,7 +247,7 @@ func TestToolRegistry_CanceledContext(t *testing.T) {
 	}
 }
 
-// 7. 测试 Definitions 按名称稳定升序排序
+// 8. 测试 Definitions 按名称稳定升序排序
 func TestToolRegistry_DefinitionsSorted(t *testing.T) {
 	tools := []Tool{
 		&fakeTool{name: "zeta"},
