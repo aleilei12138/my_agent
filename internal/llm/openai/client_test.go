@@ -40,7 +40,9 @@ func TestChat_Success(t *testing.T) {
 		// 验证请求体
 		var req chatRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			t.Fatalf("failed to decode request body: %v", err)
+			t.Errorf("failed to decode request body: %v", err)
+			http.Error(w, "invalid request", http.StatusBadRequest)
+			return
 		}
 
 		if req.Model != "gpt-4" {
@@ -48,7 +50,8 @@ func TestChat_Success(t *testing.T) {
 		}
 
 		if len(req.Messages) != 1 {
-			t.Fatalf("expected 1 message, got %d", len(req.Messages))
+			t.Errorf("expected 1 message, got %d", len(req.Messages))
+			return
 		}
 
 		if req.Messages[0].Role != "user" {
@@ -91,7 +94,7 @@ func TestChat_Success(t *testing.T) {
 	// 调用 Chat
 	msg, err := client.Chat(context.Background(), []agent.Message{
 		{Role: agent.RoleUser, Content: "hello"},
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("Chat returned error: %v", err)
 	}
@@ -126,7 +129,7 @@ func TestChat_ServerError(t *testing.T) {
 
 	_, err = client.Chat(context.Background(), []agent.Message{
 		{Role: agent.RoleUser, Content: "hello"},
-	})
+	}, nil)
 	if err == nil {
 		t.Fatal("expected error for 500 response, got nil")
 	}
@@ -156,7 +159,7 @@ func TestChat_InvalidJSON(t *testing.T) {
 
 	_, err = client.Chat(context.Background(), []agent.Message{
 		{Role: agent.RoleUser, Content: "hello"},
-	})
+	}, nil)
 	if err == nil {
 		t.Fatal("expected error for invalid JSON, got nil")
 	}
@@ -186,7 +189,7 @@ func TestChat_EmptyChoices(t *testing.T) {
 
 	_, err = client.Chat(context.Background(), []agent.Message{
 		{Role: agent.RoleUser, Content: "hello"},
-	})
+	}, nil)
 	if err == nil {
 		t.Fatal("expected error for empty choices, got nil")
 	}
@@ -199,8 +202,8 @@ func TestChat_EmptyChoices(t *testing.T) {
 // TestChat_ContextCancel 测试 context 取消时请求应该中断
 func TestChat_ContextCancel(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// 模拟慢响应
-		select {}
+		// 等待客户端 context 被取消。
+		<-r.Context().Done()
 	}))
 	defer server.Close()
 
@@ -220,7 +223,7 @@ func TestChat_ContextCancel(t *testing.T) {
 
 	_, err = client.Chat(ctx, []agent.Message{
 		{Role: agent.RoleUser, Content: "hello"},
-	})
+	}, nil)
 	if err == nil {
 		t.Fatal("expected error for cancelled context, got nil")
 	}
@@ -253,5 +256,34 @@ func TestNewClient_Validation(t *testing.T) {
 				t.Error("expected error, got nil")
 			}
 		})
+	}
+}
+
+func TestChat_ToolsUnsupported(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Error("legacy client must reject tools before sending a request")
+	}))
+	defer server.Close()
+
+	client, err := NewClient(Config{
+		BaseURL:    server.URL,
+		APIKey:     "test-api-key",
+		Model:      "gpt-4",
+		HTTPClient: server.Client(),
+	})
+	if err != nil {
+		t.Fatalf("failed to create client: %v", err)
+	}
+
+	_, err = client.Chat(
+		context.Background(),
+		[]agent.Message{{Role: agent.RoleUser, Content: "hello"}},
+		[]agent.ToolDefinition{{Name: "lookup"}},
+	)
+	if err == nil {
+		t.Fatal("expected unsupported tools error, got nil")
+	}
+	if !strings.Contains(err.Error(), "legacy client does not support tools") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }

@@ -16,7 +16,7 @@ type fakeLLM struct {
 	err              error
 }
 
-func (f *fakeLLM) Chat(ctx context.Context, messages []agent.Message) (agent.Message, error) {
+func (f *fakeLLM) Chat(ctx context.Context, messages []agent.Message, tools []agent.ToolDefinition) (agent.Message, error) {
 	f.receivedMessages = messages
 	return f.reply, f.err
 }

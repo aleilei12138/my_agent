@@ -15,5 +15,5 @@ func NewAgent(llm LLM) *Agent {
 }
 
 func (a *Agent) Chat(ctx context.Context, messages []Message) (res Message, err error) {
-	return a.llm.Chat(ctx, messages)
+	return a.llm.Chat(ctx, messages, nil)
 }
