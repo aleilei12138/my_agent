@@ -36,7 +36,7 @@ func TestControllerV1_Chat_Success(t *testing.T) {
 		},
 	}
 
-	agentInstance := agent.NewAgent(fake)
+	agentInstance := agent.NewAgent(fake, nil)
 	controller := NewV1(agentInstance)
 
 	req := &v1.ChatReq{
@@ -73,7 +73,7 @@ func TestControllerV1_Chat_LLMError(t *testing.T) {
 		err: errors.New(sensitiveVendorErr),
 	}
 
-	agentInstance := agent.NewAgent(fake)
+	agentInstance := agent.NewAgent(fake, nil)
 	controller := NewV1(agentInstance)
 
 	req := &v1.ChatReq{

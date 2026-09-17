@@ -77,6 +77,12 @@ type chatResponse struct {
 
 func (c *Client) Chat(ctx context.Context, messages []agent.Message, tools []agent.ToolDefinition) (res agent.Message, err error) {
 
+	if len(tools) > 0 {
+		return agent.Message{}, fmt.Errorf(
+			"legacy client does not support tools",
+		)
+	}
+
 	apiMessages := make([]chatMessage, len(messages))
 	for i, msg := range messages {
 		apiMessages[i] = chatMessage{
@@ -129,10 +135,6 @@ func (c *Client) Chat(ctx context.Context, messages []agent.Message, tools []age
 	//检查返回结果
 	if len(apiResp.Choices) == 0 {
 		return agent.Message{}, fmt.Errorf("empty choices")
-	}
-
-	if len(tools) > 0 {
-		return agent.Message{}, fmt.Errorf("tool support is not implemented yet")
 	}
 
 	choice := apiResp.Choices[0]

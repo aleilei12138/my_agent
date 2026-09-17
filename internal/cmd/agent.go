@@ -30,8 +30,11 @@ func newAgentFromConfig(ctx context.Context) (*agent.Agent, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to create DeepSeek client: %w", err)
 		}
-
-		return agent.NewAgent(llmClient), nil
+		registry, err := agent.NewToolRegistry()
+		if err != nil {
+			return nil, fmt.Errorf("failed to create tool registry: %w", err)
+		}
+		return agent.NewAgent(llmClient, registry), nil
 	default:
 		return nil, fmt.Errorf("unsupported LLM provider: %s", llmConfig.Provider)
 	}
