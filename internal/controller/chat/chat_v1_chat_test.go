@@ -36,7 +36,21 @@ func TestControllerV1_Chat_Success(t *testing.T) {
 		},
 	}
 
-	agentInstance := agent.NewAgent(fake, nil)
+	registry, err := agent.NewToolRegistry()
+	if err != nil {
+		t.Fatalf(
+			"NewToolRegistry() error = %v",
+			err,
+		)
+	}
+
+	agentInstance, err := agent.NewAgent(fake, registry, agent.Config{MaxTurns: 8})
+	if err != nil {
+		t.Fatalf(
+			"NewAgent() error = %v",
+			err,
+		)
+	}
 	controller := NewV1(agentInstance)
 
 	req := &v1.ChatReq{
@@ -72,8 +86,21 @@ func TestControllerV1_Chat_LLMError(t *testing.T) {
 	fake := &fakeLLM{
 		err: errors.New(sensitiveVendorErr),
 	}
+	registry, err := agent.NewToolRegistry()
+	if err != nil {
+		t.Fatalf(
+			"NewToolRegistry() error = %v",
+			err,
+		)
+	}
 
-	agentInstance := agent.NewAgent(fake, nil)
+	agentInstance, err := agent.NewAgent(fake, registry, agent.Config{MaxTurns: 8})
+	if err != nil {
+		t.Fatalf(
+			"NewAgent() error = %v",
+			err,
+		)
+	}
 	controller := NewV1(agentInstance)
 
 	req := &v1.ChatReq{

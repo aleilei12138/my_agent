@@ -115,9 +115,10 @@ func TestAgentExecuteToolCall(t *testing.T) {
 		)
 	}
 
-	a := NewAgent(
+	a, err := NewAgent(
 		&toolExecutionFakeLLM{},
 		registry,
+		Config{MaxTurns: 8},
 	)
 
 	call := ToolCall{
@@ -193,9 +194,10 @@ func TestAgentExecuteToolCallUnknownTool(t *testing.T) {
 		)
 	}
 
-	a := NewAgent(
+	a, err := NewAgent(
 		&toolExecutionFakeLLM{},
 		registry,
+		Config{MaxTurns: 8},
 	)
 
 	call := ToolCall{
@@ -239,9 +241,10 @@ func TestAgentExecuteToolCallToolError(t *testing.T) {
 		)
 	}
 
-	a := NewAgent(
+	a, err := NewAgent(
 		&toolExecutionFakeLLM{},
 		registry,
+		Config{MaxTurns: 8},
 	)
 
 	call := ToolCall{

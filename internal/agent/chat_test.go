@@ -34,7 +34,7 @@ func TestAgentChatPassesNilTools(t *testing.T) {
 		t.Fatalf("failed to create tool registry: %v", err)
 	}
 
-	a := NewAgent(fake, registry)
+	a, err := NewAgent(fake, registry, Config{MaxTurns: 8})
 	got, err := a.Chat(context.Background(), messages)
 	if err != nil {
 		t.Fatalf("Chat() error: %v", err)
@@ -57,12 +57,95 @@ func TestNewAgentStoresRegistry(t *testing.T) {
 		t.Fatalf("failed to create tool registry: %v", err)
 	}
 
-	a := NewAgent(
+	a, err := NewAgent(
 		llm,
 		registry,
+		Config{MaxTurns: 8},
 	)
 
 	if a.registry != registry {
 		t.Fatal("agent registry was not stored")
+	}
+}
+
+func TestNewAgentRejectsNilLLM(
+	t *testing.T,
+) {
+	registry, err := NewToolRegistry()
+	if err != nil {
+		t.Fatalf(
+			"NewToolRegistry() error = %v",
+			err,
+		)
+	}
+
+	_, err = NewAgent(
+		nil,
+		registry,
+		Config{
+			MaxTurns: 8,
+		},
+	)
+
+	if err == nil {
+		t.Fatal(
+			"NewAgent() error = nil, want error",
+		)
+	}
+}
+
+func TestNewAgentRejectsNilRegistry(
+	t *testing.T,
+) {
+	fake := &fakeChatLLM{}
+
+	_, err := NewAgent(
+		fake,
+		nil,
+		Config{
+			MaxTurns: 8,
+		},
+	)
+
+	if err == nil {
+		t.Fatal(
+			"NewAgent() error = nil, want error",
+		)
+	}
+}
+
+func TestNewAgentRejectsNonPositiveMaxTurns(
+	t *testing.T,
+) {
+	fake := &fakeChatLLM{}
+
+	registry, err := NewToolRegistry()
+	if err != nil {
+		t.Fatalf(
+			"NewToolRegistry() error = %v",
+			err,
+		)
+	}
+
+	tests := []int{
+		0,
+		-1,
+	}
+
+	for _, maxTurns := range tests {
+		_, err := NewAgent(
+			fake,
+			registry,
+			Config{
+				MaxTurns: maxTurns,
+			},
+		)
+
+		if err == nil {
+			t.Fatalf(
+				"NewAgent(MaxTurns=%d) error = nil, want error",
+				maxTurns,
+			)
+		}
 	}
 }
