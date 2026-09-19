@@ -38,5 +38,41 @@ func NewAgent(llm LLM, registry *ToolRegistry, cfg Config) (*Agent, error) {
 }
 
 func (a *Agent) Chat(ctx context.Context, messages []Message) (res Message, err error) {
-	return a.llm.Chat(ctx, messages, nil)
+
+	history := append(
+		[]Message(nil),
+		messages...,
+	)
+
+	definitions := a.registry.Definitions()
+
+	for turn := 0; turn < a.maxTurns; turn++ {
+
+		response, err := a.llm.Chat(ctx, history, definitions)
+
+		if err != nil {
+			return Message{}, fmt.Errorf("agent chat failed: %w", err)
+		}
+
+		if len(response.ToolCalls) == 0 {
+			return response, nil
+		}
+
+		history = append(history, response)
+
+		for _, call := range response.ToolCalls {
+
+			toolMessage, err := a.executeToolCall(ctx, call)
+			if err != nil {
+				return Message{}, fmt.Errorf("agent: tollcall failed: %w", err)
+			}
+
+			history = append(history, toolMessage)
+		}
+
+	}
+
+	return Message{}, errors.New(
+		"maximum turns",
+	)
 }
