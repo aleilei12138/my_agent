@@ -569,3 +569,488 @@ func TestAgentChatExecutesToolAndContinues(
 		)
 	}
 }
+
+func TestAgentChatReturnsMaxTurnsError(
+	t *testing.T,
+) {
+	llm := &loopFakeLLM{
+		responses: []Message{
+			{
+				Role: RoleAssistant,
+				ToolCalls: []ToolCall{
+					{
+						ID:        "call1",
+						Name:      "weather",
+						Arguments: json.RawMessage(`{}`),
+					},
+				},
+			},
+		},
+	}
+
+	weatherTool := &loopFakeTool{
+		def: ToolDefinition{
+			Name: "weather",
+		},
+	}
+
+	registry, err := NewToolRegistry(
+		weatherTool,
+	)
+
+	if err != nil {
+		t.Fatalf(
+			"registry error:%v",
+			err,
+		)
+	}
+
+	agent, err := NewAgent(
+		llm,
+		registry,
+		Config{
+			MaxTurns: 1,
+		},
+	)
+
+	if err != nil {
+		t.Fatalf(
+			"agent error:%v",
+			err,
+		)
+	}
+
+	_, err = agent.Chat(
+		context.Background(),
+		[]Message{
+			{
+				Role:    RoleUser,
+				Content: "test",
+			},
+		},
+	)
+
+	if !errors.Is(
+		err,
+		ErrMaxTurns,
+	) {
+		t.Fatalf(
+			"expected ErrMaxTurns, got %v",
+			err,
+		)
+	}
+}
+
+func TestAgentChatRejectsDuplicateToolCallID(
+	t *testing.T,
+) {
+
+	llm := &loopFakeLLM{
+		responses: []Message{
+
+			{
+				Role: RoleAssistant,
+
+				ToolCalls: []ToolCall{
+					{
+						ID:        "same_call",
+						Name:      "weather",
+						Arguments: json.RawMessage(`{}`),
+					},
+				},
+			},
+
+			{
+				Role: RoleAssistant,
+
+				ToolCalls: []ToolCall{
+					{
+						ID:        "same_call",
+						Name:      "weather",
+						Arguments: json.RawMessage(`{}`),
+					},
+				},
+			},
+		},
+	}
+
+	weatherTool := &loopFakeTool{
+		def: ToolDefinition{
+			Name: "weather",
+		},
+	}
+
+	registry, err := NewToolRegistry(
+		weatherTool,
+	)
+
+	if err != nil {
+		t.Fatalf(
+			"registry error:%v",
+			err,
+		)
+	}
+
+	agent, err := NewAgent(
+		llm,
+		registry,
+		Config{
+			MaxTurns: 3,
+		},
+	)
+
+	if err != nil {
+		t.Fatalf(
+			"agent error:%v",
+			err,
+		)
+	}
+
+	_, err = agent.Chat(
+		context.Background(),
+		[]Message{
+			{
+				Role:    RoleUser,
+				Content: "test",
+			},
+		},
+	)
+
+	if !errors.Is(
+		err,
+		ErrDuplicateToolCallID,
+	) {
+
+		t.Fatalf(
+			"expected ErrDuplicateToolCallID, got %v",
+			err,
+		)
+	}
+
+	if llm.callCount != 2 {
+
+		t.Fatalf(
+			"LLM calls=%d want2",
+			llm.callCount,
+		)
+	}
+}
+
+func TestAgentChatContextAlreadyCancelled(
+	t *testing.T,
+) {
+
+	ctx, cancel := context.WithCancel(
+		context.Background(),
+	)
+
+	cancel()
+
+	llm := &loopFakeLLM{
+		responses: []Message{
+			{
+				Role:    RoleAssistant,
+				Content: "hello",
+			},
+		},
+	}
+
+	registry, _ :=
+		NewToolRegistry()
+
+	agent, _ :=
+		NewAgent(
+			llm,
+			registry,
+			Config{
+				MaxTurns: 3,
+			},
+		)
+
+	_, err :=
+		agent.Chat(
+			ctx,
+			[]Message{
+				{
+					Role:    RoleUser,
+					Content: "hi",
+				},
+			},
+		)
+
+	if err == nil {
+		t.Fatal(
+			"expected context error",
+		)
+	}
+
+	if llm.callCount != 0 {
+		t.Fatalf(
+			"LLM calls=%d want 0",
+			llm.callCount,
+		)
+	}
+}
+
+type cancelTool struct {
+	def ToolDefinition
+
+	cancel context.CancelFunc
+}
+
+func (t *cancelTool) Definition() ToolDefinition {
+	return t.def
+}
+
+func (t *cancelTool) Execute(
+	ctx context.Context,
+	arguments json.RawMessage,
+) (ToolResult, error) {
+
+	t.cancel()
+
+	return ToolResult{}, ctx.Err()
+}
+
+func TestAgentChatToolContextCancelled(
+	t *testing.T,
+) {
+
+	ctx, cancel :=
+		context.WithCancel(
+			context.Background(),
+		)
+
+	llm := &loopFakeLLM{
+
+		responses: []Message{
+
+			{
+				Role: RoleAssistant,
+
+				ToolCalls: []ToolCall{
+
+					{
+						ID: "call_cancel",
+
+						Name: "cancel_tool",
+
+						Arguments: json.RawMessage(`{}`),
+					},
+				},
+			},
+		},
+	}
+
+	cancelTool := &cancelTool{
+
+		def: ToolDefinition{
+			Name: "cancel_tool",
+		},
+
+		cancel: cancel,
+	}
+
+	registry, err :=
+		NewToolRegistry(
+			cancelTool,
+		)
+
+	if err != nil {
+		t.Fatalf(
+			"registry error:%v",
+			err,
+		)
+	}
+
+	agent, err :=
+		NewAgent(
+			llm,
+			registry,
+			Config{
+				MaxTurns: 3,
+			},
+		)
+
+	if err != nil {
+		t.Fatalf(
+			"agent error:%v",
+			err,
+		)
+	}
+
+	_, err =
+		agent.Chat(
+			ctx,
+			[]Message{
+
+				{
+					Role: RoleUser,
+
+					Content: "test",
+				},
+			},
+		)
+
+	if err == nil {
+		t.Fatal(
+			"expected context cancellation error",
+		)
+	}
+
+	if !errors.Is(
+		err,
+		context.Canceled,
+	) {
+
+		t.Fatalf(
+			"expected context.Canceled got %v",
+			err,
+		)
+	}
+}
+
+type errorResultTool struct {
+	def ToolDefinition
+}
+
+func (t *errorResultTool) Definition() ToolDefinition {
+
+	return t.def
+}
+
+func (t *errorResultTool) Execute(
+	ctx context.Context,
+	arguments json.RawMessage,
+) (ToolResult, error) {
+
+	return ToolResult{
+
+		Content: "weather api unavailable",
+
+		IsError: true,
+	}, nil
+}
+
+func TestAgentChatContinuesAfterToolResultError(
+	t *testing.T,
+) {
+
+	llm := &loopFakeLLM{
+
+		responses: []Message{
+
+			{
+				Role: RoleAssistant,
+
+				ToolCalls: []ToolCall{
+
+					{
+						ID: "call_error",
+
+						Name: "weather",
+
+						Arguments: json.RawMessage(`{}`),
+					},
+				},
+			},
+
+			{
+				Role: RoleAssistant,
+
+				Content: "天气服务暂时不可用",
+			},
+		},
+	}
+
+	tool := &errorResultTool{
+
+		def: ToolDefinition{
+			Name: "weather",
+		},
+	}
+
+	registry, err :=
+		NewToolRegistry(
+			tool,
+		)
+
+	if err != nil {
+		t.Fatalf(
+			"registry error:%v",
+			err,
+		)
+	}
+
+	agent, err :=
+		NewAgent(
+			llm,
+			registry,
+			Config{
+				MaxTurns: 3,
+			},
+		)
+
+	if err != nil {
+		t.Fatalf(
+			"agent error:%v",
+			err,
+		)
+	}
+
+	result, err :=
+		agent.Chat(
+			context.Background(),
+
+			[]Message{
+
+				{
+					Role: RoleUser,
+
+					Content: "北京天气怎么样",
+				},
+			},
+		)
+
+	if err != nil {
+		t.Fatalf(
+			"Chat error:%v",
+			err,
+		)
+	}
+
+	if result.Content !=
+		"天气服务暂时不可用" {
+
+		t.Fatalf(
+			"unexpected result:%s",
+			result.Content,
+		)
+	}
+
+	if llm.callCount != 2 {
+
+		t.Fatalf(
+			"LLM calls=%d want2",
+			llm.callCount,
+		)
+	}
+
+	secondHistory :=
+		llm.receivedMessages[1]
+
+	if len(secondHistory) != 3 {
+
+		t.Fatalf(
+			"history length=%d want3",
+			len(secondHistory),
+		)
+	}
+
+	if secondHistory[2].Role != RoleTool {
+
+		t.Fatalf(
+			"expected tool message",
+		)
+	}
+}

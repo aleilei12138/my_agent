@@ -44,9 +44,25 @@ func (a *Agent) Chat(ctx context.Context, messages []Message) (res Message, err 
 		messages...,
 	)
 
+	seenToolCalls := make(map[string]struct{})
+
 	definitions := a.registry.Definitions()
 
+	if err := ctx.Err(); err != nil {
+		return Message{}, fmt.Errorf(
+			"agent: context canceled: %w",
+			err,
+		)
+	}
+
 	for turn := 0; turn < a.maxTurns; turn++ {
+
+		if err := ctx.Err(); err != nil {
+			return Message{}, fmt.Errorf(
+				"agent: context canceled: %w",
+				err,
+			)
+		}
 
 		response, err := a.llm.Chat(ctx, history, definitions)
 
@@ -62,6 +78,11 @@ func (a *Agent) Chat(ctx context.Context, messages []Message) (res Message, err 
 
 		for _, call := range response.ToolCalls {
 
+			if _, exists := seenToolCalls[call.ID]; exists {
+				return Message{}, fmt.Errorf("agent: %w: %s", ErrDuplicateToolCallID, call.ID)
+			}
+
+			seenToolCalls[call.ID] = struct{}{}
 			toolMessage, err := a.executeToolCall(ctx, call)
 			if err != nil {
 				return Message{}, fmt.Errorf("agent: tollcall failed: %w", err)
@@ -72,7 +93,5 @@ func (a *Agent) Chat(ctx context.Context, messages []Message) (res Message, err 
 
 	}
 
-	return Message{}, errors.New(
-		"maximum turns",
-	)
+	return Message{}, fmt.Errorf("agent: %w", ErrMaxTurns)
 }

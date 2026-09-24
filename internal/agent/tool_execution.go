@@ -7,6 +7,13 @@ import (
 
 func (a *Agent) executeToolCall(ctx context.Context, call ToolCall) (Message, error) {
 
+	if err := ctx.Err(); err != nil {
+		return Message{}, fmt.Errorf(
+			"agent: context canceled: %w",
+			err,
+		)
+	}
+
 	result, err := a.registry.Execute(ctx, call)
 
 	if err != nil {
