@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 )
 
@@ -273,6 +274,57 @@ func TestAgentExecuteToolCallToolError(t *testing.T) {
 			"error = %v, want wrapped error %v",
 			err,
 			sentinelErr,
+		)
+	}
+
+	if !strings.Contains(
+		err.Error(),
+		call.ID,
+	) {
+		t.Fatalf(
+			"error = %q, want ToolCall ID %q",
+			err.Error(),
+			call.ID,
+		)
+	}
+}
+
+func TestAgentExecuteToolCallNilAgent(
+	t *testing.T,
+) {
+	var a *Agent
+
+	_, err := a.executeToolCall(
+		context.Background(),
+		ToolCall{
+			ID:   "call_1",
+			Name: "weather",
+		},
+	)
+
+	if err == nil {
+		t.Fatal(
+			"executeToolCall() error = nil, want error",
+		)
+	}
+}
+
+func TestAgentExecuteToolCallNilRegistry(
+	t *testing.T,
+) {
+	a := &Agent{}
+
+	_, err := a.executeToolCall(
+		context.Background(),
+		ToolCall{
+			ID:   "call_1",
+			Name: "weather",
+		},
+	)
+
+	if err == nil {
+		t.Fatal(
+			"executeToolCall() error = nil, want error",
 		)
 	}
 }

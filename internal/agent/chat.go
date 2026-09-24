@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 )
 
 type Agent struct {
@@ -70,22 +71,33 @@ func (a *Agent) Chat(ctx context.Context, messages []Message) (res Message, err 
 			return Message{}, fmt.Errorf("agent chat failed: %w", err)
 		}
 
+		if response.Role != RoleAssistant {
+			return Message{}, fmt.Errorf(
+				"agent: unexpected LLM response role %q, want %q",
+				response.Role,
+				RoleAssistant,
+			)
+		}
+
 		if len(response.ToolCalls) == 0 {
 			return response, nil
+		}
+
+		if err := validateAndRecordToolCalls(response.ToolCalls, seenToolCalls); err != nil {
+			return Message{}, err
 		}
 
 		history = append(history, response)
 
 		for _, call := range response.ToolCalls {
 
-			if _, exists := seenToolCalls[call.ID]; exists {
-				return Message{}, fmt.Errorf("agent: %w: %s", ErrDuplicateToolCallID, call.ID)
+			if err := ctx.Err(); err != nil {
+				return Message{}, fmt.Errorf("agent: context canceled before tool execution: % w", err)
 			}
 
-			seenToolCalls[call.ID] = struct{}{}
 			toolMessage, err := a.executeToolCall(ctx, call)
 			if err != nil {
-				return Message{}, fmt.Errorf("agent: tollcall failed: %w", err)
+				return Message{}, fmt.Errorf("agent: toll call failed: %w", err)
 			}
 
 			history = append(history, toolMessage)
@@ -94,4 +106,47 @@ func (a *Agent) Chat(ctx context.Context, messages []Message) (res Message, err 
 	}
 
 	return Message{}, fmt.Errorf("agent: %w", ErrMaxTurns)
+}
+
+// 检查重复、空值不仅是当前轮次是否重复。
+func validateAndRecordToolCalls(
+	calls []ToolCall,
+	seen map[string]struct{},
+) error {
+	currentTurn := make(
+		map[string]struct{},
+		len(calls),
+	)
+
+	for _, call := range calls {
+		if strings.TrimSpace(call.ID) == "" {
+			return errors.New(
+				"agent: tool call ID cannot be empty",
+			)
+		}
+
+		if _, exists := seen[call.ID]; exists {
+			return fmt.Errorf(
+				"agent: %w: %q",
+				ErrDuplicateToolCallID,
+				call.ID,
+			)
+		}
+
+		if _, exists := currentTurn[call.ID]; exists {
+			return fmt.Errorf(
+				"agent: %w: %q",
+				ErrDuplicateToolCallID,
+				call.ID,
+			)
+		}
+
+		currentTurn[call.ID] = struct{}{}
+	}
+
+	for id := range currentTurn {
+		seen[id] = struct{}{}
+	}
+
+	return nil
 }

@@ -1054,3 +1054,430 @@ func TestAgentChatContinuesAfterToolResultError(
 		)
 	}
 }
+
+func TestNewAgentValidation(t *testing.T) {
+	registry, err := NewToolRegistry()
+	if err != nil {
+		t.Fatalf(
+			"NewToolRegistry() error = %v",
+			err,
+		)
+	}
+
+	t.Run("nil llm", func(t *testing.T) {
+		_, err := NewAgent(
+			nil,
+			registry,
+			Config{MaxTurns: 1},
+		)
+
+		if err == nil {
+			t.Fatal(
+				"NewAgent() error = nil, want error",
+			)
+		}
+	})
+
+	t.Run("nil registry", func(t *testing.T) {
+		_, err := NewAgent(
+			&loopFakeLLM{},
+			nil,
+			Config{MaxTurns: 1},
+		)
+
+		if err == nil {
+			t.Fatal(
+				"NewAgent() error = nil, want error",
+			)
+		}
+	})
+
+	t.Run("zero max turns", func(t *testing.T) {
+		_, err := NewAgent(
+			&loopFakeLLM{},
+			registry,
+			Config{MaxTurns: 0},
+		)
+
+		if err == nil {
+			t.Fatal(
+				"NewAgent() error = nil, want error",
+			)
+		}
+	})
+
+	t.Run("negative max turns", func(t *testing.T) {
+		_, err := NewAgent(
+			&loopFakeLLM{},
+			registry,
+			Config{MaxTurns: -1},
+		)
+
+		if err == nil {
+			t.Fatal(
+				"NewAgent() error = nil, want error",
+			)
+		}
+	})
+}
+
+func TestAgentChatRejectsNonAssistantResponse(
+	t *testing.T,
+) {
+	llm := &loopFakeLLM{
+		responses: []Message{
+			{
+				Role:    RoleUser,
+				Content: "invalid response",
+			},
+		},
+	}
+
+	registry, err := NewToolRegistry()
+	if err != nil {
+		t.Fatalf(
+			"NewToolRegistry() error = %v",
+			err,
+		)
+	}
+
+	a, err := NewAgent(
+		llm,
+		registry,
+		Config{MaxTurns: 3},
+	)
+	if err != nil {
+		t.Fatalf(
+			"NewAgent() error = %v",
+			err,
+		)
+	}
+
+	_, err = a.Chat(
+		context.Background(),
+		[]Message{
+			{
+				Role:    RoleUser,
+				Content: "hello",
+			},
+		},
+	)
+
+	if err == nil {
+		t.Fatal(
+			"Chat() error = nil, want error",
+		)
+	}
+
+	if llm.callCount != 1 {
+		t.Fatalf(
+			"LLM call count = %d, want 1",
+			llm.callCount,
+		)
+	}
+}
+
+func TestAgentChatRejectsEmptyToolCallIDBeforeExecution(
+	t *testing.T,
+) {
+	llm := &loopFakeLLM{
+		responses: []Message{
+			{
+				Role: RoleAssistant,
+				ToolCalls: []ToolCall{
+					{
+						ID:        "call_1",
+						Name:      "weather",
+						Arguments: json.RawMessage(`{}`),
+					},
+					{
+						ID:        "",
+						Name:      "weather",
+						Arguments: json.RawMessage(`{}`),
+					},
+				},
+			},
+		},
+	}
+
+	tool := &loopFakeTool{
+		def: ToolDefinition{
+			Name: "weather",
+		},
+	}
+
+	registry, err := NewToolRegistry(tool)
+	if err != nil {
+		t.Fatalf(
+			"NewToolRegistry() error = %v",
+			err,
+		)
+	}
+
+	a, err := NewAgent(
+		llm,
+		registry,
+		Config{MaxTurns: 3},
+	)
+	if err != nil {
+		t.Fatalf(
+			"NewAgent() error = %v",
+			err,
+		)
+	}
+
+	_, err = a.Chat(
+		context.Background(),
+		[]Message{
+			{
+				Role:    RoleUser,
+				Content: "test",
+			},
+		},
+	)
+
+	if err == nil {
+		t.Fatal(
+			"Chat() error = nil, want error",
+		)
+	}
+
+	if tool.executed {
+		t.Fatal(
+			"tool was executed before the whole ToolCall batch was validated",
+		)
+	}
+}
+
+func TestAgentChatRejectsDuplicateToolCallIDInSameTurnBeforeExecution(
+	t *testing.T,
+) {
+	llm := &loopFakeLLM{
+		responses: []Message{
+			{
+				Role: RoleAssistant,
+				ToolCalls: []ToolCall{
+					{
+						ID:        "same_call",
+						Name:      "weather",
+						Arguments: json.RawMessage(`{}`),
+					},
+					{
+						ID:        "same_call",
+						Name:      "weather",
+						Arguments: json.RawMessage(`{}`),
+					},
+				},
+			},
+		},
+	}
+
+	tool := &loopFakeTool{
+		def: ToolDefinition{
+			Name: "weather",
+		},
+	}
+
+	registry, err := NewToolRegistry(tool)
+	if err != nil {
+		t.Fatalf(
+			"NewToolRegistry() error = %v",
+			err,
+		)
+	}
+
+	a, err := NewAgent(
+		llm,
+		registry,
+		Config{MaxTurns: 3},
+	)
+	if err != nil {
+		t.Fatalf(
+			"NewAgent() error = %v",
+			err,
+		)
+	}
+
+	_, err = a.Chat(
+		context.Background(),
+		[]Message{
+			{
+				Role:    RoleUser,
+				Content: "test",
+			},
+		},
+	)
+
+	if !errors.Is(
+		err,
+		ErrDuplicateToolCallID,
+	) {
+		t.Fatalf(
+			"Chat() error = %v, want ErrDuplicateToolCallID",
+			err,
+		)
+	}
+
+	if tool.executed {
+		t.Fatal(
+			"tool was executed before the whole ToolCall batch was validated",
+		)
+	}
+}
+
+type orderedLoopTool struct {
+	def   ToolDefinition
+	order *[]string
+}
+
+func (t *orderedLoopTool) Definition() ToolDefinition {
+	return t.def
+}
+
+func (t *orderedLoopTool) Execute(
+	ctx context.Context,
+	arguments json.RawMessage,
+) (ToolResult, error) {
+	*t.order = append(
+		*t.order,
+		t.def.Name,
+	)
+
+	return ToolResult{
+		Content: t.def.Name + " result",
+	}, nil
+}
+
+func TestAgentChatExecutesMultipleToolsInOrder(
+	t *testing.T,
+) {
+	llm := &loopFakeLLM{
+		responses: []Message{
+			{
+				Role: RoleAssistant,
+				ToolCalls: []ToolCall{
+					{
+						ID:        "call_a",
+						Name:      "tool_a",
+						Arguments: json.RawMessage(`{}`),
+					},
+					{
+						ID:        "call_b",
+						Name:      "tool_b",
+						Arguments: json.RawMessage(`{}`),
+					},
+				},
+			},
+			{
+				Role:    RoleAssistant,
+				Content: "done",
+			},
+		},
+	}
+
+	order := make(
+		[]string,
+		0,
+		2,
+	)
+
+	toolA := &orderedLoopTool{
+		def: ToolDefinition{
+			Name: "tool_a",
+		},
+		order: &order,
+	}
+
+	toolB := &orderedLoopTool{
+		def: ToolDefinition{
+			Name: "tool_b",
+		},
+		order: &order,
+	}
+
+	registry, err := NewToolRegistry(
+		toolA,
+		toolB,
+	)
+	if err != nil {
+		t.Fatalf(
+			"NewToolRegistry() error = %v",
+			err,
+		)
+	}
+
+	a, err := NewAgent(
+		llm,
+		registry,
+		Config{MaxTurns: 3},
+	)
+	if err != nil {
+		t.Fatalf(
+			"NewAgent() error = %v",
+			err,
+		)
+	}
+
+	result, err := a.Chat(
+		context.Background(),
+		[]Message{
+			{
+				Role:    RoleUser,
+				Content: "run tools",
+			},
+		},
+	)
+
+	if err != nil {
+		t.Fatalf(
+			"Chat() error = %v",
+			err,
+		)
+	}
+
+	if result.Content != "done" {
+		t.Fatalf(
+			"result content = %q, want %q",
+			result.Content,
+			"done",
+		)
+	}
+
+	if len(order) != 2 ||
+		order[0] != "tool_a" ||
+		order[1] != "tool_b" {
+
+		t.Fatalf(
+			"execution order = %v, want [tool_a tool_b]",
+			order,
+		)
+	}
+
+	secondHistory :=
+		llm.receivedMessages[1]
+
+	if len(secondHistory) != 4 {
+		t.Fatalf(
+			"second history length = %d, want 4",
+			len(secondHistory),
+		)
+	}
+
+	if secondHistory[2].Role != RoleTool ||
+		secondHistory[2].ToolCallID != "call_a" {
+
+		t.Fatalf(
+			"message[2] = %+v, want tool result for call_a",
+			secondHistory[2],
+		)
+	}
+
+	if secondHistory[3].Role != RoleTool ||
+		secondHistory[3].ToolCallID != "call_b" {
+
+		t.Fatalf(
+			"message[3] = %+v, want tool result for call_b",
+			secondHistory[3],
+		)
+	}
+}

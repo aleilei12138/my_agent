@@ -2,10 +2,21 @@ package agent
 
 import (
 	"context"
+	"errors"
 	"fmt"
 )
 
 func (a *Agent) executeToolCall(ctx context.Context, call ToolCall) (Message, error) {
+
+	if a == nil {
+		return Message{}, errors.New("agent: cannot execute tool call with nil agent")
+	}
+
+	if a.registry == nil {
+		return Message{}, errors.New(
+			"agent: tool registry cannot be nil",
+		)
+	}
 
 	if err := ctx.Err(); err != nil {
 		return Message{}, fmt.Errorf(
@@ -17,7 +28,12 @@ func (a *Agent) executeToolCall(ctx context.Context, call ToolCall) (Message, er
 	result, err := a.registry.Execute(ctx, call)
 
 	if err != nil {
-		return Message{}, fmt.Errorf("execute tool call %q: %w", call.ID, err)
+		return Message{}, fmt.Errorf(
+			"execute tool call id=%q name=%q: %w",
+			call.ID,
+			call.Name,
+			err,
+		)
 	}
 
 	return Message{
