@@ -6,6 +6,7 @@ import (
 	"my-project/internal/agent"
 	"my-project/internal/config"
 	"my-project/internal/llm/deepseek"
+	"my-project/internal/tools/calculator"
 	"net/http"
 )
 
@@ -32,7 +33,7 @@ func newAgentFromConfig(ctx context.Context) (*agent.Agent, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to create DeepSeek client: %w", err)
 		}
-		registry, err := agent.NewToolRegistry()
+		registry, err := agent.NewToolRegistry(calculator.New())
 		if err != nil {
 			return nil, fmt.Errorf("failed to create tool registry: %w", err)
 		}
